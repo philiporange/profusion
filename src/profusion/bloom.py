@@ -1,9 +1,10 @@
+import json
 import math
 import os
 from typing import Any, Tuple
+import zipfile
 
 import mmh3
-import h5py
 
 from . import __version__, __program__
 
@@ -67,7 +68,7 @@ class Bloom:
         return result
 
     def save(self, path: str = None) -> None:
-        """Save filter to HDF5 file"""
+        """Save filter to a ZIP file containing metadata.json and bf.bin"""
         if path:
             self.path = path
         elif not hasattr(self, "path"):
@@ -75,34 +76,42 @@ class Bloom:
                 "path must be specified at init or when calling save()"
             )
 
-        with h5py.File(self.path, "w") as hf:
-            hf.attrs["version"] = __version__
-            hf.attrs["program"] = __program__
-            hf.attrs["type"] = self.type
-            hf.attrs["bins"] = self.bins
-            hf.attrs["hashes"] = self.hashes
-            hf.create_dataset("bf", data=self.bf, compression="gzip")
+        metadata = {
+            "version": __version__,
+            "program": __program__,
+            "type": self.type,
+            "bins": self.bins,
+            "hashes": self.hashes,
+        }
+
+        with zipfile.ZipFile(self.path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("metadata.json", json.dumps(metadata))
+            zf.writestr("bf.bin", self.bf)
 
     def load(self, path: str) -> None:
-        """Load filter from HDF5 file"""
+        """Load filter from a ZIP file containing metadata.json and bf.bin"""
         if path is None:
             raise BloomException("path must be specified when calling load()")
 
         if not os.path.isfile(path):
             raise BloomException(f"'{path}' must be a file")
 
-        with h5py.File(path, "r") as hf:
-            if hf.attrs["program"] != __program__:
-                raise BloomException(f"Unrecognized file format '{path}'")
-            if hf.attrs["type"] != self.type:
-                raise BloomException(
-                    f"Input '{path}' contains incorrect bloom type"
-                )
+        with zipfile.ZipFile(path, "r") as zf:
+            try:
+                metadata = json.loads(zf.read("metadata.json"))
+                if metadata["program"] != __program__:
+                    raise BloomException(f"Unrecognized file format '{path}'")
+                if metadata["type"] != self.type:
+                    raise BloomException(
+                        f"Input '{path}' contains incorrect bloom type"
+                    )
 
-            self.bins = hf.attrs["bins"]
-            self.hashes = hf.attrs["hashes"]
-            self.bf = bytearray(hf["bf"][:])
-            self.bytes = self.bins // 8
+                self.bins = metadata["bins"]
+                self.hashes = metadata["hashes"]
+                self.bf = bytearray(zf.read("bf.bin"))
+                self.bytes = self.bins // 8
+            except KeyError as e:
+                raise BloomException(f"Invalid file format: missing {e}")
 
     def __contains__(self, s: str) -> bool:
         return self.check(s)

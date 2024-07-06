@@ -1,8 +1,8 @@
+import json
 import os
 import math
 from typing import Any, List
-
-import h5py
+import zipfile
 
 from . import __version__, __program__
 from . import Bloom, BloomException
@@ -110,51 +110,51 @@ class ScalableBloom(Bloom):
         if self.path is None:
             raise BloomException("No path specified")
 
-        with h5py.File(self.path, "w") as hf:
-            hf.attrs["version"] = __version__
-            hf.attrs["program"] = __program__
-            hf.attrs["type"] = self.type
-            hf.attrs["blooms"] = int(self.blooms)
-            hf.attrs["threshold"] = int(self.threshold)
-            hf.attrs["elements"] = int(self.elements)
-            hf.attrs["max_error"] = float(self.max_error)
-            hf.attrs["error_decay_rate"] = float(self.error_decay_rate)
-            hf.attrs["initial_size"] = int(self.initial_size)
-            hf.attrs["growth_factor"] = float(self.growth_factor)
+        metadata = {
+            "version": __version__,
+            "program": __program__,
+            "type": self.type,
+            "blooms": int(self.blooms),
+            "threshold": int(self.threshold),
+            "elements": int(self.elements),
+            "max_error": float(self.max_error),
+            "error_decay_rate": float(self.error_decay_rate),
+            "initial_size": int(self.initial_size),
+            "growth_factor": float(self.growth_factor),
+            "bins_list": self.bins_list,
+            "hashes": self.hashes,
+        }
 
-            hf.create_dataset("bins_list", data=self.bins_list)
-            hf.create_dataset("hashes", data=self.hashes)
-
-            # Save bloom filters
-            bfs_group = hf.create_group("bfs")
+        with zipfile.ZipFile(self.path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("metadata.json", json.dumps(metadata))
             for i, bf in enumerate(self.bfs):
-                bfs_group.create_dataset(
-                    f"bf_{i}", data=self.bfs[i], compression="gzip"
-                )
+                zf.writestr(f"bf_{i}.bin", bf)
 
     def load(self, path: str) -> None:
         if not os.path.isfile(path):
             raise BloomException(f"'{path}' must be a file")
 
-        with h5py.File(path, "r") as hf:
-            if hf.attrs["type"] != self.type:
-                raise BloomException(f"Invalid type: {hf.attrs['type']}")
+        with zipfile.ZipFile(path, "r") as zf:
+            try:
+                metadata = json.loads(zf.read("metadata.json"))
+                if metadata["type"] != self.type:
+                    raise BloomException(f"Invalid type: {metadata['type']}")
 
-            self.blooms = int(hf.attrs["blooms"])
-            self.threshold = int(hf.attrs["threshold"])
-            self.elements = int(hf.attrs["elements"])
-            self.max_error = float(hf.attrs["max_error"])
-            self.error_decay_rate = float(hf.attrs["error_decay_rate"])
-            self.initial_size = int(hf.attrs["initial_size"])
-            self.growth_factor = float(hf.attrs["growth_factor"])
+                self.blooms = int(metadata["blooms"])
+                self.threshold = int(metadata["threshold"])
+                self.elements = int(metadata["elements"])
+                self.max_error = float(metadata["max_error"])
+                self.error_decay_rate = float(metadata["error_decay_rate"])
+                self.initial_size = int(metadata["initial_size"])
+                self.growth_factor = float(metadata["growth_factor"])
+                self.bins_list = metadata["bins_list"]
+                self.hashes = metadata["hashes"]
 
-            self.bins_list = list(hf["bins_list"][:])
-            self.hashes = list(hf["hashes"][:])
-
-            self.bfs = []
-            bfs_group = hf["bfs"]
-            for i in range(self.blooms):
-                self.bfs.append(bytearray(bfs_group[f"bf_{i}"][:]))
+                self.bfs = []
+                for i in range(self.blooms):
+                    self.bfs.append(bytearray(zf.read(f"bf_{i}.bin")))
+            except KeyError as e:
+                raise BloomException(f"Invalid file format: missing {e}")
 
         self.path = path
 

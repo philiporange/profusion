@@ -1,7 +1,7 @@
+import json
 import math
 from typing import Any
-
-import h5py
+import zipfile
 
 from . import __version__, __program__
 from . import Bloom, BloomException
@@ -69,34 +69,44 @@ class CountingBloom(Bloom):
         if self.path is None:
             raise BloomException("No path specified")
 
-        with h5py.File(self.path, "w") as hf:
-            hf.attrs["version"] = __version__
-            hf.attrs["program"] = __program__
-            hf.attrs["type"] = self.type
-            hf.attrs["capacity"] = int(self.capacity)
-            hf.attrs["hashes"] = int(self.hashes)
-            hf.attrs["error_ratio"] = float(self.error_ratio)
-            hf.attrs["bin_size"] = int(self.bin_size)
+        metadata = {
+            "version": __version__,
+            "program": __program__,
+            "type": self.type,
+            "capacity": int(self.capacity),
+            "hashes": int(self.hashes),
+            "error_ratio": float(self.error_ratio),
+            "bin_size": int(self.bin_size),
+            "bins": self.bins,
+            "bin_bytes": self.bin_bytes,
+            "bytes": self.bytes,
+        }
 
-            hf.create_dataset("bf", data=self.bf, compression="gzip")
+        with zipfile.ZipFile(self.path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("metadata.json", json.dumps(metadata))
+            zf.writestr("bf.bin", self.bf)
 
     def load(self, path: str) -> None:
         if not path:
             raise BloomException("No path specified")
 
-        with h5py.File(path, "r") as hf:
-            if hf.attrs["type"] != self.type:
-                raise BloomException(f"Invalid type: {hf.attrs['type']}")
+        with zipfile.ZipFile(path, "r") as zf:
+            try:
+                metadata = json.loads(zf.read("metadata.json"))
+                if metadata["type"] != self.type:
+                    raise BloomException(f"Invalid type: {metadata['type']}")
 
-            self.hashes = int(hf.attrs["hashes"])
-            self.capacity = int(hf.attrs["capacity"])
-            self.error_ratio = float(hf.attrs["error_ratio"])
-            self.bin_size = int(hf.attrs["bin_size"])
+                self.hashes = int(metadata["hashes"])
+                self.capacity = int(metadata["capacity"])
+                self.error_ratio = float(metadata["error_ratio"])
+                self.bin_size = int(metadata["bin_size"])
+                self.bins = int(metadata["bins"])
+                self.bin_bytes = int(metadata["bin_bytes"])
+                self.bytes = int(metadata["bytes"])
 
-            self._init_counting_bloom()
-
-            # Load bf as a bytearray
-            self.bf = bytearray(hf["bf"][:])
+                self.bf = bytearray(zf.read("bf.bin"))
+            except KeyError as e:
+                raise BloomException(f"Invalid file format: missing {e}")
 
         self.path = path
 

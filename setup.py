@@ -31,7 +31,6 @@ setup(
     python_requires=">=3.6",
     install_requires=[
         "mmh3",
-        "h5py",
     ],
     extras_require={
         "dev": [
