@@ -1,8 +1,7 @@
-import binascii
-import gzip
-import json
 import math
 from typing import Any
+
+import h5py
 
 from . import __version__, __program__
 from . import Bloom, BloomException
@@ -64,48 +63,42 @@ class CountingBloom(Bloom):
         return self.value(s) >= trigger
 
     def save(self, path: str = None) -> None:
-        """Save filter to file"""
         if path is not None:
             self.path = path
 
         if self.path is None:
             raise BloomException("No path specified")
 
-        properties = {
-            "version": __version__,
-            "program": __program__,
-            "type": self.type,
-            "bloom": {
-                "capacity": self.capacity,
-                "hashes": self.hashes,
-                "error_ratio": self.error_ratio,
-                "bin_size": self.bin_size,
-                "bf": binascii.hexlify(self.bf).decode("utf-8"),
-            },
-        }
+        with h5py.File(self.path, "w") as hf:
+            hf.attrs["version"] = __version__
+            hf.attrs["program"] = __program__
+            hf.attrs["type"] = self.type
+            hf.attrs["capacity"] = int(self.capacity)
+            hf.attrs["hashes"] = int(self.hashes)
+            hf.attrs["error_ratio"] = float(self.error_ratio)
+            hf.attrs["bin_size"] = int(self.bin_size)
 
-        with gzip.open(self.path, "wb") as fp:
-            fp.write(json.dumps(properties).encode("utf-8"))
+            hf.create_dataset("bf", data=self.bf, compression="gzip")
 
     def load(self, path: str) -> None:
-        """Load filter from file"""
         if not path:
             raise BloomException("No path specified")
 
-        with gzip.open(path, "rb") as fp:
-            properties = json.loads(fp.read().decode("utf-8"))
+        with h5py.File(path, "r") as hf:
+            if hf.attrs["type"] != self.type:
+                raise BloomException(f"Invalid type: {hf.attrs['type']}")
 
-        if properties["type"] != self.type:
-            raise BloomException(f"Invalid type: {properties['type']}")
+            self.hashes = int(hf.attrs["hashes"])
+            self.capacity = int(hf.attrs["capacity"])
+            self.error_ratio = float(hf.attrs["error_ratio"])
+            self.bin_size = int(hf.attrs["bin_size"])
 
-        self._init_counting_bloom()
-        self.hashes = properties["bloom"]["hashes"]
-        self.capacity = properties["bloom"]["capacity"]
-        bins = self.hashes * self.capacity / math.log(2)
-        self.bins = int(math.ceil(bins))
-        self.error_ratio = properties["bloom"]["error_ratio"]
-        self.bin_size = properties["bloom"]["bin_size"]
-        self.bf = bytearray(binascii.unhexlify(properties["bloom"]["bf"]))
+            self._init_counting_bloom()
+
+            # Load bf as a bytearray
+            self.bf = bytearray(hf["bf"][:])
+
+        self.path = path
 
     def __contains__(self, s: str) -> bool:
         return self.check(s)

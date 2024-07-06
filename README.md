@@ -25,11 +25,11 @@ bf = Bloom(capacity=1000000, error_ratio=1e-5)
 # Add elements
 bf.add("apple")
 bf.add("banana")
-bf.add("cherry")
+bf.add("carrot")
 
 # Check if elements are in the filter
 print("apple" in bf)  # True
-print("durian" in bf)  # False
+print("donut" in bf)  # False
 
 # Save the filter to a file
 bf.save("bloom_filter.gz")
@@ -53,13 +53,13 @@ cbf = CountingBloom(capacity=1000000, error_ratio=1e-5, bin_size=255)
 # Add elements with different counts
 cbf.add("apple", amount=3)
 cbf.add("banana", amount=2)
-cbf.add("cherry", amount=1)
+cbf.add("carrot", amount=1)
 
 # Check the count of elements
 print(cbf.value("apple"))  # 3
 print(cbf.value("banana"))  # 2
-print(cbf.value("cherry"))  # 1
-print(cbf.value("durian"))  # 0
+print(cbf.value("carrot"))  # 1
+print(cbf.value("donut"))  # 0
 
 # Check if elements meet a certain threshold
 print(cbf.check("apple", trigger=2))  # True

@@ -1,11 +1,9 @@
-import binascii
-import gzip
-import json
 import math
 import os
 from typing import Any, Tuple
 
 import mmh3
+import h5py
 
 from . import __version__, __program__
 
@@ -69,7 +67,7 @@ class Bloom:
         return result
 
     def save(self, path: str = None) -> None:
-        """Save filter to file"""
+        """Save filter to HDF5 file"""
         if path:
             self.path = path
         elif not hasattr(self, "path"):
@@ -77,48 +75,34 @@ class Bloom:
                 "path must be specified at init or when calling save()"
             )
 
-        saved_bloom = {
-            "version": __version__,
-            "program": __program__,
-            "type": self.type,
-            "bloom": {
-                "bins": self.bins,
-                "hashes": self.hashes,
-                "bf": binascii.hexlify(self.bf).decode(),
-            },
-        }
-
-        with gzip.open(self.path, "wb") as f:
-            f.write(json.dumps(saved_bloom).encode())
+        with h5py.File(self.path, "w") as hf:
+            hf.attrs["version"] = __version__
+            hf.attrs["program"] = __program__
+            hf.attrs["type"] = self.type
+            hf.attrs["bins"] = self.bins
+            hf.attrs["hashes"] = self.hashes
+            hf.create_dataset("bf", data=self.bf, compression="gzip")
 
     def load(self, path: str) -> None:
-        """Load filter from file"""
+        """Load filter from HDF5 file"""
         if path is None:
             raise BloomException("path must be specified when calling load()")
 
         if not os.path.isfile(path):
             raise BloomException(f"'{path}' must be a file")
 
-        with gzip.open(path, "rb") as f:
-            try:
-                saved_bloom = json.loads(f.read().decode())
-            except json.JSONDecodeError as e:
-                raise BloomException(f"Invalid JSON: {e}")
+        with h5py.File(path, "r") as hf:
+            if hf.attrs["program"] != __program__:
+                raise BloomException(f"Unrecognized file format '{path}'")
+            if hf.attrs["type"] != self.type:
+                raise BloomException(
+                    f"Input '{path}' contains incorrect bloom type"
+                )
 
-        if (
-            "program" not in saved_bloom
-            or saved_bloom["program"] != __program__
-        ):
-            raise BloomException(f"Unrecognized file format '{path}'")
-        if saved_bloom["type"] != self.type:
-            raise BloomException(
-                f"Input '{path}' contains incorrect bloom type"
-            )
-
-        self.bins = saved_bloom["bloom"]["bins"]
-        self.hashes = saved_bloom["bloom"]["hashes"]
-        self.bf = bytearray.fromhex(saved_bloom["bloom"]["bf"])
-        self.bytes = self.bins // 8
+            self.bins = hf.attrs["bins"]
+            self.hashes = hf.attrs["hashes"]
+            self.bf = bytearray(hf["bf"][:])
+            self.bytes = self.bins // 8
 
     def __contains__(self, s: str) -> bool:
         return self.check(s)

@@ -1,4 +1,4 @@
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __program__ = "profusion"
 
 from .bloom import Bloom, BloomException

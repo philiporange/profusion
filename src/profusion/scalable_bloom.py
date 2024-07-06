@@ -1,9 +1,8 @@
 import os
-import json
-import binascii
-import gzip
 import math
 from typing import Any, List
+
+import h5py
 
 from . import __version__, __program__
 from . import Bloom, BloomException
@@ -111,50 +110,52 @@ class ScalableBloom(Bloom):
         if self.path is None:
             raise BloomException("No path specified")
 
-        saved_bloom = {
-            "version": __version__,
-            "program": __program__,
-            "type": self.type,
-            "bloom": {
-                "blooms": self.blooms,
-                "threshold": self.threshold,
-                "elements": self.elements,
-                "max_error": self.max_error,
-                "error_decay_rate": self.error_decay_rate,
-                "initial_size": self.initial_size,
-                "growth_factor": self.growth_factor,
-                "blooms_list": self.bins_list,
-                "hashes": self.hashes,
-                "bfs": [binascii.hexlify(bf).decode() for bf in self.bfs],
-            },
-        }
+        with h5py.File(self.path, "w") as hf:
+            hf.attrs["version"] = __version__
+            hf.attrs["program"] = __program__
+            hf.attrs["type"] = self.type
+            hf.attrs["blooms"] = int(self.blooms)
+            hf.attrs["threshold"] = int(self.threshold)
+            hf.attrs["elements"] = int(self.elements)
+            hf.attrs["max_error"] = float(self.max_error)
+            hf.attrs["error_decay_rate"] = float(self.error_decay_rate)
+            hf.attrs["initial_size"] = int(self.initial_size)
+            hf.attrs["growth_factor"] = float(self.growth_factor)
 
-        with gzip.open(self.path, "wb") as fp:
-            fp.write(json.dumps(saved_bloom).encode("utf-8"))
+            hf.create_dataset("bins_list", data=self.bins_list)
+            hf.create_dataset("hashes", data=self.hashes)
+
+            # Save bloom filters
+            bfs_group = hf.create_group("bfs")
+            for i, bf in enumerate(self.bfs):
+                bfs_group.create_dataset(
+                    f"bf_{i}", data=self.bfs[i], compression="gzip"
+                )
 
     def load(self, path: str) -> None:
         if not os.path.isfile(path):
             raise BloomException(f"'{path}' must be a file")
 
-        with gzip.open(path, "rb") as fp:
-            properties = json.loads(fp.read().decode("utf-8"))
+        with h5py.File(path, "r") as hf:
+            if hf.attrs["type"] != self.type:
+                raise BloomException(f"Invalid type: {hf.attrs['type']}")
 
-        if properties["type"] != self.type:
-            raise BloomException(f"Invalid type: {properties['type']}")
+            self.blooms = int(hf.attrs["blooms"])
+            self.threshold = int(hf.attrs["threshold"])
+            self.elements = int(hf.attrs["elements"])
+            self.max_error = float(hf.attrs["max_error"])
+            self.error_decay_rate = float(hf.attrs["error_decay_rate"])
+            self.initial_size = int(hf.attrs["initial_size"])
+            self.growth_factor = float(hf.attrs["growth_factor"])
 
-        self.blooms = properties["bloom"]["blooms"]
-        self.threshold = properties["bloom"]["threshold"]
-        self.elements = properties["bloom"]["elements"]
-        self.max_error = properties["bloom"]["max_error"]
-        self.error_decay_rate = properties["bloom"]["error_decay_rate"]
-        self.initial_size = properties["bloom"]["initial_size"]
-        self.growth_factor = properties["bloom"]["growth_factor"]
-        self.bins_list = properties["bloom"]["blooms_list"]
-        self.hashes = properties["bloom"]["hashes"]
-        self.bfs = [
-            bytearray(binascii.unhexlify(bf))
-            for bf in properties["bloom"]["bfs"]
-        ]
+            self.bins_list = list(hf["bins_list"][:])
+            self.hashes = list(hf["hashes"][:])
+
+            self.bfs = []
+            bfs_group = hf["bfs"]
+            for i in range(self.blooms):
+                self.bfs.append(bytearray(bfs_group[f"bf_{i}"][:]))
+
         self.path = path
 
     def __contains__(self, s: str) -> bool:
