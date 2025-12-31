@@ -1,0 +1,83 @@
+{
+  "name": "profusion",
+  "short_description": "Python library implementing standard, counting, scalable, and memory-mapped Bloom filter data structures.",
+  "long_description": "Profusion is a Python library that implements multiple variants of Bloom filters, probabilistic data structures optimized for space-efficient storage and querying of large datasets. The library provides four main implementations: a standard Bloom filter for basic membership testing, a counting Bloom filter for element frequency tracking, a scalable Bloom filter that dynamically grows as more elements are added, and a memory-mapped counting Bloom filter that uses file-backed storage for persistence. Bloom filters trade accuracy for space by using multiple hash functions to map elements to bit arrays, allowing for very fast lookups with a tunable false positive rate. These filters are commonly used in caching systems, spam detection, network routing, and other scenarios where space-efficient membership testing is valuable.",
+  "keywords": [
+    "bloom-filter",
+    "data-structures",
+    "probabilistic-data-structure",
+    "counting-bloom",
+    "scalable-bloom",
+    "memory-mapped",
+    "hash-functions",
+    "set-membership",
+    "caching",
+    "spam-filtering",
+    "network-routing",
+    "space-efficient",
+    "python-library"
+  ],
+  "primary_language": "Python",
+  "languages": [
+    "Python"
+  ],
+  "frameworks": [
+    "mmh3"
+  ],
+  "modules": [
+    {
+      "path": "src/profusion/__init__.py",
+      "description": "Package initialization and exports for Bloom, CountingBloom, ScalableBloom, and MMCountingBloom classes."
+    },
+    {
+      "path": "src/profusion/bloom.py",
+      "description": "Standard Bloom filter implementation with bit-level operations for membership testing, persistence via ZIP files, and configurable capacity and error ratios."
+    },
+    {
+      "path": "src/profusion/counting_bloom.py",
+      "description": "Counting Bloom filter that extends the standard Bloom filter to track element frequencies using binned counters instead of single bits."
+    },
+    {
+      "path": "src/profusion/scalable_bloom.py",
+      "description": "Scalable Bloom filter that automatically adds new internal filters as element count exceeds capacity thresholds, supporting unlimited growth."
+    },
+    {
+      "path": "src/profusion/mmapped_counting_bloom.py",
+      "description": "Memory-mapped counting Bloom filter using file-backed storage for persistence and concurrent access with file locking."
+    },
+    {
+      "path": "tests/test_bloom.py",
+      "description": "Unit tests for standard Bloom filter covering initialization, add/check operations, persistence, and saturation tracking."
+    },
+    {
+      "path": "tests/test_counting_bloom.py",
+      "description": "Unit tests for counting Bloom filter validating frequency tracking, threshold checking, and persistence."
+    },
+    {
+      "path": "tests/test_scalable_bloom.py",
+      "description": "Unit tests for scalable Bloom filter verifying dynamic growth, multi-filter operations, and persistence."
+    },
+    {
+      "path": "tests/test_mmapped_counting_bloom.py",
+      "description": "Unit tests for memory-mapped counting Bloom filter testing file-backed storage and concurrent access patterns."
+    },
+    {
+      "path": "setup.py",
+      "description": "Package configuration defining metadata, dependencies, and installation requirements."
+    }
+  ],
+  "git": {
+    "is_repo": true,
+    "remote_url": "https://github.com/philiporange/profusion.git",
+    "github_name": "philiporange/profusion",
+    "default_branch": "main",
+    "last_commit": "2024-07-06T12:30:51+01:00"
+  },
+  "stats": {
+    "files": 17,
+    "lines_of_code": 1180,
+    "size_bytes": 53056
+  },
+  "generated_at": "2025-12-06T22:18:04.194136",
+  "generator_version": "1.0.0"
+}
